@@ -3,7 +3,7 @@ import { redirect, fail } from '@sveltejs/kit';
 import type { Actions } from './$types';
 
 export const actions: Actions = {
-  signup: async ({ request, locals: { supabase } }) => {
+  signup: async ({ request, locals: { supabase }, url }) => {
     const formData = await request.formData();
     const name = formData.get('name') as string;
     const email = formData.get('email') as string;
@@ -14,13 +14,16 @@ export const actions: Actions = {
       return fail(400, { message: 'All fields are required' });
     }
 
+    const origin = `${url.protocol}//${url.host}`;
+
     const { data, error } = await supabase.auth.signUp({ 
       email, 
       password,
       options: {
         data: {
           name: name
-        }
+        },
+        emailRedirectTo: `${origin}/auth/confirm`
       }
     });
 
@@ -28,15 +31,25 @@ export const actions: Actions = {
       console.error(error);
       return fail(500, { message: error.message });
     } else {
-      // Optionally update user profile with name
       if (data.user) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          name: name,
-          updated_at: new Date()
-        });
+        // Create profile entry
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            name: name,
+            email: email,
+            authorized: false,  // Set initial authorization status
+            created_at: new Date()
+          });
+
+        if (profileError) {
+          console.error(profileError);
+          return fail(500, { message: 'Failed to create user profile' });
+        }
       }
-      throw redirect(303, '/');
+      // Don't redirect, show a message to check email
+      return { success: true, message: 'Please check your email to confirm your account.' };
     }
   },
 
@@ -49,12 +62,25 @@ export const actions: Actions = {
       return fail(400, { message: 'Email and password are required' });
     }
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       console.error(error);
       return fail(500, { message: error.message });
     } else {
-      throw redirect(303, '/private');
+      // Fetch user profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError) {
+        console.error(profileError);
+        return fail(500, { message: 'Failed to fetch user profile' });
+      }
+
+      // You can now use profile.name
+      return { success: true, user: { ...data.user, name: profile.name } };
     }
   },
 };

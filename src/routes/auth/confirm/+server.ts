@@ -8,24 +8,30 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
   const type = url.searchParams.get('type') as EmailOtpType | null
   const next = url.searchParams.get('next') ?? '/'
 
-  /**
-   * Clean up the redirect URL by deleting the Auth flow parameters.
-   *
-   * `next` is preserved for now, because it's needed in the error case.
-   */
   const redirectTo = new URL(url)
   redirectTo.pathname = next
   redirectTo.searchParams.delete('token_hash')
   redirectTo.searchParams.delete('type')
 
   if (token_hash && type) {
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash })
-    if (!error) {
+    const { data, error } = await supabase.auth.verifyOtp({ type, token_hash })
+    if (!error && data.user) {
+      // Update the authorized field in the profiles table
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ authorized: true })
+        .eq('id', data.user.id)
+
+      if (updateError) {
+        console.error('Error updating profile:', updateError)
+      }
+
       redirectTo.searchParams.delete('next')
-      redirect(303, redirectTo)
+      return redirect(303, redirectTo)
     }
   }
 
+  // If there's an error or no token_hash/type, redirect to the error page
   redirectTo.pathname = '/auth/error'
-  redirect(303, redirectTo)
+  return redirect(303, redirectTo)
 }

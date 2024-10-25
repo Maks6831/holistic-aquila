@@ -2,6 +2,7 @@
   import { page } from "$app/stores";
 
   $: user = $page.data.session?.user;
+  console.log(user);
 </script>
 
 <h1>Dashboard</h1>

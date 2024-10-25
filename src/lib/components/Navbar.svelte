@@ -1,11 +1,16 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { getContext } from "svelte";
   import { goto } from "$app/navigation";
   import type { SupabaseClient } from "@supabase/supabase-js";
+  import { writable } from "svelte/store";
 
-  // Get the session store from the context
-  const session: any = getContext("session");
+  // Create a writable store for the session
+  const sessionStore = writable();
+
+  // Get the session from the store
+  $: session = $page.data.session;
+  // Update the store when the session changes
+  $: sessionStore.set(session);
 
   // Mobile menu toggle
   let mobileMenu: HTMLElement;
@@ -16,11 +21,9 @@
   }
 
   async function handleAuthAction() {
-    if ($session) {
+    if (session) {
       // User is logged in, so log them out
-      const { supabase } = getContext("supabase") as {
-        supabase: SupabaseClient;
-      };
+      const { supabase } = $page.data;
       await supabase.auth.signOut();
       goto("/"); // Redirect to home page after logout
     } else {
@@ -78,7 +81,7 @@
           on:click={handleAuthAction}
           class="py-2 px-2 font-medium text-white bg-green-500 rounded hover:bg-green-400 transition duration-300"
         >
-          {$session ? "Logout" : "Login/Register"}
+          {$sessionStore ? "Logout" : "Login/Register"}
         </button>
       </div>
       <!-- Mobile menu button -->
@@ -128,7 +131,7 @@
           on:click={handleAuthAction}
           class="block text-sm px-2 py-4 hover:bg-green-500 transition duration-300 w-full text-left"
         >
-          {$session ? "Logout" : "Login/Register"}
+          {$sessionStore ? "Logout" : "Login/Register"}x
         </button>
       </li>
     </ul>

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
   import * as yup from "yup";
+  import { enhance } from "$app/forms";
+  import { page } from "$app/stores";
 
   let isLogin = true;
   let name = "";
@@ -8,6 +9,7 @@
   let password = "";
   let confirmPassword = "";
   let errors: Record<string, string> = {};
+  let serverError = "";
 
   const loginSchema = yup.object().shape({
     email: yup.string().email("Invalid email").required("Email is required"),
@@ -59,21 +61,53 @@
     password = "";
     confirmPassword = "";
     errors = {};
+    serverError = ""; // Clear the server error when toggling forms
   }
 
-  function handleSubmit(event: Event) {
-    validateForm().then((isValid) => {
-      if (!isValid) {
-        event.preventDefault();
-      }
+  async function handleSubmit(event: Event) {
+    event.preventDefault();
+    const isValid = await validateForm();
+    if (!isValid) return;
+
+    const form = event.target as HTMLFormElement;
+
+    // Use enhance with a submit function
+    return enhance(form, ({ form, data, action, cancel }) => {
+      // Reset the server error before each submission
+      serverError = "";
+      return async ({ result, update }) => {
+        if (result.type === "failure") {
+          serverError = "Email not registered or password is incorrect";
+        }
+        await update();
+      };
     });
   }
 </script>
+
+{#if $page.form?.success}
+  <div
+    class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4"
+    role="alert"
+  >
+    <span class="block sm:inline">{$page.form.message}</span>
+  </div>
+{/if}
 
 <main class="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
   <h1 class="text-2xl font-bold mb-6 text-center">
     {isLogin ? "Login" : "Sign Up"}
   </h1>
+
+  {#if serverError}
+    <div
+      class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+      role="alert"
+    >
+      <span class="block sm:inline">{serverError}</span>
+    </div>
+  {/if}
+
   <form
     method="POST"
     action="?/{isLogin ? 'login' : 'signup'}"
